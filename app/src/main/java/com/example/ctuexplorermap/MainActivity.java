@@ -3,16 +3,24 @@ package com.example.ctuexplorermap;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.location.Criteria;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
+import android.os.AsyncTask;
+import android.os.Looper;
 import android.os.StrictMode;
 import android.preference.PreferenceManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
+import org.osmdroid.bonuspack.routing.GraphHopperRoadManager;
+import org.osmdroid.bonuspack.routing.MapQuestRoadManager;
+import org.osmdroid.bonuspack.routing.GoogleRoadManager;
 import org.osmdroid.bonuspack.routing.OSRMRoadManager;
 import org.osmdroid.bonuspack.routing.Road;
 import org.osmdroid.bonuspack.routing.RoadManager;
@@ -121,10 +129,44 @@ public class MainActivity extends AppCompatActivity {
         mapView = findViewById(R.id.map);
         mapView.setClickable(true);
         mapView.setMultiTouchControls(true);
-        mapView.getController().setZoom(9.5);
+        mapView.getController().setZoom(18.0);
         mapView.setTileSource(TileSourceFactory.MAPNIK);
 
         LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        Criteria criteria = new Criteria();
+        criteria.setAccuracy(Criteria.ACCURACY_COARSE);
+        criteria.setPowerRequirement(Criteria.POWER_LOW);
+        criteria.setAltitudeRequired(false);
+        criteria.setBearingRequired(false);
+        criteria.setSpeedRequired(false);
+        criteria.setCostAllowed(true);
+        criteria.setHorizontalAccuracy(Criteria.ACCURACY_HIGH);
+        criteria.setVerticalAccuracy(Criteria.ACCURACY_HIGH);
+
+        final Looper looper = null;
+
+        final LocationListener locationListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                Log.d("Location Changes", location.toString());
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {
+                Log.d("Status Changed", String.valueOf(status));
+            }
+
+            @Override
+            public void onProviderEnabled(String provider) {
+                Log.d("Provider Enabled", provider);
+            }
+
+            @Override
+            public void onProviderDisabled(String provider) {
+                Log.d("Provider Disabled", provider);
+            }
+        };
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // TODO: Consider calling
@@ -142,13 +184,14 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        lm.requestSingleUpdate(criteria, locationListener, looper);
         Location mLastLocation = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
         double longitude = mLastLocation.getLongitude();
         double latitude = mLastLocation.getLatitude();
-
-        //double longitude = 105.764811;
-        //double latitude = 10.027050;
-
+        /*
+        double longitude = 105.772119;
+        double latitude = 10.030240;
+        */
         GeoPoint startPoint = new GeoPoint(latitude, longitude);
         mapView.getController().setCenter(startPoint);
 
@@ -159,7 +202,7 @@ public class MainActivity extends AppCompatActivity {
 
         ArrayList<GeoPoint> waypoints = new ArrayList<>();
         waypoints.add(startPoint);
-        GeoPoint endPoint = new GeoPoint(10.030325, 105.770221);
+        GeoPoint endPoint = new GeoPoint(10.032834, 105.770585);
         waypoints.add(endPoint);
 
         Marker endMarker = new Marker(mapView);
@@ -167,13 +210,62 @@ public class MainActivity extends AppCompatActivity {
         endMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
         mapView.getOverlays().add(endMarker);
 
+        /*GraphHopper*/
+        //RoadManager roadManager = new GraphHopperRoadManager("93d5910a-4990-468b-ab85-c30c3af133ae", true);
+        //roadManager.addRequestOption("vehicle=foot");
+        //roadManager.addRequestOption("optimize=true");
+
+        /*MapQuest*/
+        //RoadManager roadManager = new MapQuestRoadManager("RXNG0U0napwuyddVhEkhdv4mmbac6WGm");
+        //roadManager.addRequestOption("routeType=pedestrian");
+
+        /*Google*/
+        //RoadManager roadManager = new GoogleRoadManager();
+
+        /*OSRM*/
         RoadManager roadManager = new OSRMRoadManager(this);
+
         Road road = roadManager.getRoad(waypoints);
+        if (road.mStatus != Road.STATUS_OK) {
+            Toast.makeText(this, "Route failed to load", Toast.LENGTH_LONG).show();
+        }
         Polyline roadOverlay = RoadManager.buildRoadOverlay(road);
         mapView.getOverlays().add(roadOverlay);
         mapView.invalidate();
+
+        /*Async (OSRM)*/
+        //new UpdateRoadTask().execute(waypoints);
     }
 
+    /**
+     * Async task to get the road in a separate thread.
+     */
+    /*
+    private class UpdateRoadTask extends AsyncTask<Object, Void, Road> {
+
+        protected Road doInBackground(Object... params) {
+            @SuppressWarnings("unchecked")
+            ArrayList<GeoPoint> waypoints = (ArrayList<GeoPoint>)params[0];
+            RoadManager roadManager = new OSRMRoadManager(this);
+            return roadManager.getRoad(waypoints);
+        }
+        @Override
+        protected void onPostExecute(Road result) {
+            Road road = result;
+            // showing distance and duration of the road
+            Toast.makeText(this, "distance="+road.mLength, Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "durée="+road.mDuration, Toast.LENGTH_LONG).show();
+
+            if(road.mStatus != Road.STATUS_OK)
+                Toast.makeText(this, "Error when loading the road - status="+road.mStatus, Toast.LENGTH_SHORT).show();
+            Polyline roadOverlay = RoadManager.buildRoadOverlay(road);
+
+            mapView.getOverlays().add(roadOverlay);
+            mapView.invalidate();
+            //updateUIWithRoad(result);
+        }
+    }
+    */
     public void onResume(){
         super.onResume();
         //this will refresh the osmdroid configuration on resuming.
